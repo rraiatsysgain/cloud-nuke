@@ -31,9 +31,13 @@ func CreateCli(version string) *cli.App {
 			Action: errors.WithPanicHandling(awsNuke),
 			Flags: []cli.Flag{
 				cli.StringSliceFlag{
-					Name:  "exclude-region",
-					Usage: "regions to exclude",
+					Name:  "include-region",
+					Usage: "regions to include",
 				},
+				//cli.StringSliceFlag{
+				//	Name:  "exclude-region",
+				//	Usage: "regions to exclude",
+				//},
 				cli.StringFlag{
 					Name:  "older-than",
 					Usage: "Only delete resources older than this specified value. Can be any valid Go duration, such as 10m or 8h.",
@@ -48,6 +52,15 @@ func CreateCli(version string) *cli.App {
 	}
 
 	return app
+}
+
+func remove(s []string, r string) []string {
+	for i, v := range s {
+		if v == r {
+			return append(s[:i], s[i+1:]...)
+		}
+	}
+	return s
 }
 
 func parseDurationParam(paramValue string) (*time.Time, error) {
@@ -65,16 +78,35 @@ func parseDurationParam(paramValue string) (*time.Time, error) {
 
 func awsNuke(c *cli.Context) error {
 	regions := aws.GetAllRegions()
-	excludedRegions := c.StringSlice("exclude-region")
-
-	for _, excludedRegion := range excludedRegions {
-		if !collections.ListContainsElement(regions, excludedRegion) {
-			return InvalidFlagError{
-				Name:  "exclude-regions",
-				Value: excludedRegion,
+	includedRegions := c.StringSlice("include-region")
+	//excludedRegions := c.StringSlice("exclude-region")
+	excludedRegions := regions
+	
+	for _, region := range includedRegions {
+		// Ignore all cli excluded regions
+		if collections.ListContainsElement(excludedRegions, region) {
+			excludedRegions = remove(excludedRegions, region)			
+		}
+	}
+	
+	for _, includedRegion := range includedRegions {
+		if !collections.ListContainsElement(regions, includedRegion) {
+			return InvalidFlagError{				
+				Name:  "include-regions",
+				Value: includedRegion,
 			}
 		}
 	}
+	
+	
+	//for _, excludedRegion := range excludedRegions {
+	//	if !collections.ListContainsElement(regions, excludedRegion) {
+	//		return InvalidFlagError{
+	//			Name:  "exclude-regions",				
+	//			Value: excludedRegion,
+	//		}
+	//	}
+	//}
 
 	excludeAfter, err := parseDurationParam(c.String("older-than"))
 	if err != nil {
